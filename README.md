@@ -1,6 +1,9 @@
 # Laboratorio 2 de Arquitectura de Software
 
-Backend REST desarrollado con Spring Boot a partir del proyecto base del laboratorio. Permite consultar el estado de la aplicación, su versión y datos aleatorios de naciones, monedas y aviación. El trabajo incorpora pruebas automatizadas, cobertura con JaCoCo, integración continua, contenerización con Docker y despliegue en Render.
+[![Quality Gate](https://sonarcloud.io/api/project_badges/quality_gate?project=Camii1234_lab2p2026)](https://sonarcloud.io/summary/new_code?id=Camii1234_lab2p2026)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Camii1234_lab2p2026&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Camii1234_lab2p2026)
+
+Backend REST desarrollado con Spring Boot a partir del proyecto base del laboratorio. Permite consultar el estado de la aplicación, su versión y datos aleatorios de naciones, monedas y aviación. El trabajo incorpora pruebas automatizadas, cobertura con JaCoCo, análisis de calidad con SonarQube Cloud, integración continua, contenerización con Docker y despliegue en Render.
 
 Backend público: [lab2p2026-maria-camila.onrender.com](https://lab2p2026-maria-camila.onrender.com).
 
@@ -24,8 +27,9 @@ Backend público: [lab2p2026-maria-camila.onrender.com](https://lab2p2026-maria-
 | Maven Wrapper 3.3.4 | Ejecución reproducible de Maven 3.9.16 |
 | JUnit Jupiter | Pruebas incluidas mediante el starter de pruebas de Spring Boot |
 | JaCoCo 0.8.10 | Medición de cobertura y generación del reporte local |
+| SonarQube Cloud | Análisis de calidad y verificación del Quality Gate |
 | JavaFaker 1.0.2 | Generación de datos aleatorios |
-| GitHub Actions | Pruebas, construcción del artefacto JAR y solicitud de despliegue |
+| GitHub Actions | Pruebas, análisis de calidad, construcción del artefacto JAR y solicitud de despliegue |
 | Docker | Construcción multietapa y ejecución del backend |
 | Render | Alojamiento del backend mediante Docker |
 
@@ -122,22 +126,41 @@ El workflow `CI/CD Pipeline` está definido en `.github/workflows/build.yml` y s
 - Pull requests dirigidos a `main`.
 - Ejecución manual con `workflow_dispatch`.
 
-Los jobs de pruebas y construcción utilizan `ubuntu-latest`, Eclipse Temurin Java 17, el Maven Wrapper y la caché de Maven integrada en `setup-java`. Los permisos del workflow se limitan a `contents: read`.
+Los jobs de pruebas, análisis y construcción utilizan `ubuntu-latest`, Eclipse Temurin Java 17, el Maven Wrapper y la caché de Maven integrada en `setup-java`. Los permisos del workflow se limitan a `contents: read`.
 
 1. **`tests` — Unit tests:** concede permiso de ejecución a `mvnw`, muestra las versiones de Java y Maven, y ejecuta `./mvnw -B --no-transfer-progress clean verify` con pruebas.
-2. **`build` — Build JAR:** depende de `tests` mediante `needs: tests`. Si las pruebas finalizan correctamente, ejecuta `./mvnw -B --no-transfer-progress package -DskipTests`, comprueba que exista `target/lab2p2026.jar` y lo carga como artefacto `lab2p2026-jar`, con retención de 7 días. Si falta el JAR, el job falla.
-3. **`deploy` — Deploy to Render:** depende de `build` y solo se ejecuta si el evento es un push a `main`, con la condición `github.event_name == 'push' && github.ref == 'refs/heads/main'`. Comprueba que el secreto de repositorio `RENDER_DEPLOY_HOOK_URL` no esté vacío y solicita el despliegue mediante un POST, sin imprimir su valor ni el cuerpo de la respuesta.
+2. **`sonar` — SonarQube Cloud analysis:** depende de `tests` mediante `needs: tests`, obtiene el historial completo con `fetch-depth: 0` y ejecuta `clean verify` y el análisis con el Maven Wrapper. Espera el resultado del Quality Gate mediante `-Dsonar.qualitygate.wait=true`; si el análisis falla o el Quality Gate no se aprueba, los jobs siguientes no se ejecutan.
+3. **`build` — Build JAR:** depende de `sonar` mediante `needs: sonar`. Solo si el análisis finaliza correctamente y el Quality Gate es aprobado, ejecuta `./mvnw -B --no-transfer-progress package -DskipTests`, comprueba que exista `target/lab2p2026.jar` y lo carga como artefacto `lab2p2026-jar`, con retención de 7 días. Si falta el JAR, el job falla.
+4. **`deploy` — Deploy to Render:** depende de `build` y solo se ejecuta después de que los jobs anteriores finalicen correctamente y si el evento es un push a `main`, con la condición `github.event_name == 'push' && github.ref == 'refs/heads/main'`. Comprueba que el secreto de repositorio `RENDER_DEPLOY_HOOK_URL` no esté vacío y solicita el despliegue mediante un POST, sin imprimir su valor ni el cuerpo de la respuesta.
 
-La secuencia configurada es **`tests → build → deploy`**. En el segundo job se omiten las pruebas porque ya fueron ejecutadas correctamente por el primero.
+La secuencia configurada es **`tests → sonar → build → deploy`**. En `build` se omiten las pruebas porque ya fueron ejecutadas correctamente en los jobs anteriores.
 
 | Evento | Comportamiento |
 | --- | --- |
-| Push a `feature/**` | Ejecuta pruebas y construcción; omite el despliegue |
-| Pull request hacia `main` | Ejecuta pruebas y construcción; omite el despliegue |
-| Push a `main` | Solicita el despliegue únicamente después de que `tests` y `build` terminen correctamente |
-| Ejecución manual | Ejecuta pruebas y construcción; omite el despliegue |
+| Push a `feature/**` | Ejecuta pruebas y análisis; construye si se aprueba el Quality Gate; omite el despliegue en Render |
+| Pull request hacia `main` | Ejecuta pruebas y análisis; construye si se aprueba el Quality Gate; omite el despliegue |
+| Push a `main` | Solicita el despliegue únicamente después de que `tests`, `sonar` y `build` terminen correctamente |
+| Ejecución manual | Ejecuta pruebas y análisis; construye si se aprueba el Quality Gate; omite el despliegue |
 
-El Deploy Hook solicita el despliegue, pero GitHub Actions no espera a que Render termine la construcción y el arranque. El job `deploy` está configurado; su comprobación final en un push a `main` se realizará después de fusionar `feature/cloud-deployment`.
+El Deploy Hook solicita el despliegue, pero GitHub Actions no espera a que Render termine la construcción y el arranque. El job `deploy` y el Deploy Hook ya fueron validados en `main` antes de incorporar SonarQube Cloud al pipeline.
+
+## Análisis de calidad con SonarQube Cloud
+
+Proyecto propio: [Camii1234_lab2p2026](https://sonarcloud.io/project/overview?id=Camii1234_lab2p2026), perteneciente a la organización `camii1234`. La autenticación utiliza `SONAR_TOKEN`, configurado como secreto del repositorio de GitHub; su valor no se incluye en archivos ni se imprime.
+
+El análisis importa el reporte XML generado por JaCoCo en `target/site/jacoco/jacoco.xml`, detectado automáticamente por SonarScanner. Los siguientes resultados fueron obtenidos y validados en `feature/sonarcloud`; las métricas locales de JaCoCo se conservan en su sección correspondiente.
+
+| Indicador | Resultado |
+| --- | --- |
+| Quality Gate | Passed |
+| Cobertura | 93,0 % |
+| Seguridad | Calificación A; 0 problemas abiertos |
+| Fiabilidad | Calificación A; 0 problemas abiertos |
+| Mantenibilidad | Calificación A; 0 problemas abiertos |
+| Duplicación | 0,0 % |
+| Security Hotspots | 0 |
+
+SonarQube Cloud también mostró 19 riesgos de dependencias con calificación D. Este resultado no impidió aprobar el Quality Gate y debe revisarse por separado para evaluar su alcance y aplicabilidad; no significa que todos los riesgos sean vulnerabilidades explotables.
 
 ## Contenerización con Docker
 
@@ -207,7 +230,7 @@ La imagen `lab2p2026:local` se conserva localmente.
 | Construcción | Dockerfile del repositorio [Camii1234/lab2p2026](https://github.com/Camii1234/lab2p2026) |
 | Auto-Deploy | Desactivado |
 
-La integración sigue el flujo **GitHub Actions → Deploy Hook → Render → Docker**. Después de las pruebas y la construcción, el job `deploy` solicita a Render un despliegue mediante el secreto `RENDER_DEPLOY_HOOK_URL`. Render construye la imagen con el Dockerfile del repositorio y ejecuta el JAR generado durante esa construcción.
+La integración sigue el flujo **GitHub Actions → Deploy Hook → Render → Docker**. Después de superar las pruebas y el Quality Gate y completar la construcción, el job `deploy` solicita a Render un despliegue en un push a `main` mediante el secreto `RENDER_DEPLOY_HOOK_URL`. Render construye la imagen con el Dockerfile del repositorio y ejecuta el JAR generado durante esa construcción.
 
 La aplicación utiliza el `PORT` proporcionado por Render, con 8080 como valor predeterminado local. El contenedor mantiene Java 17 y el usuario sin privilegios `app`. Auto-Deploy está desactivado para que las solicitudes automáticas de despliegue se controlen desde el pipeline.
 
@@ -228,7 +251,8 @@ La validación en la nube obtuvo:
 - **`main`:** rama estable del proyecto.
 - **`feature/lab2-cicd`:** rama de trabajo para el pipeline, la contenerización y la documentación del laboratorio.
 - **`feature/cloud-deployment`:** rama de trabajo para la integración y documentación del despliegue en Render.
-- **Integración:** los cambios se integrarán posteriormente en `main` mediante un pull request, después de su revisión y de la ejecución exitosa de CI.
+- **`feature/sonarcloud`:** rama de trabajo para la integración y documentación del análisis de calidad con SonarQube Cloud.
+- **Integración:** las ramas de trabajo se integran en `main` mediante un pull request, después de su revisión y de la ejecución exitosa de CI.
 
 ## Resultados verificados y estado
 
@@ -243,11 +267,11 @@ La validación en la nube obtuvo:
 | CI de pruebas y construcción | Ejecución finalizada correctamente en `feature/lab2-cicd` |
 | Render | Backend público desplegado con plan Free en Oregon |
 | Backend en la nube | Cinco endpoints con HTTP 200 y cantidades 10, 20 y 20 |
-| Integración de despliegue | Job `deploy` configurado; comprobación final en `main` después de fusionar la rama |
+| Integración de despliegue | Job `deploy` y Deploy Hook validados en `main` antes de incorporar SonarQube Cloud |
 
-La ejecución exitosa de CI puede consultarse en [GitHub Actions](https://github.com/Camii1234/lab2p2026/actions/runs/37786740796).
+Las ejecuciones históricas exitosas pueden consultarse en GitHub Actions: [pruebas y construcción en `feature/lab2-cicd`](https://github.com/Camii1234/lab2p2026/actions/runs/37786740796) y [pruebas, construcción y despliegue en `main`](https://github.com/Camii1234/lab2p2026/actions/runs/37796502460).
 
-La validación local, Docker, CI de pruebas y construcción, y los endpoints del servicio desplegado en Render están completados. Queda por comprobar el job `deploy` en un push a `main` después de fusionar la rama. Las configuraciones heredadas de análisis presentes en el POM no constituyen una integración activa en el pipeline actual; el análisis externo y la publicación de imágenes permanecen fuera de esta etapa.
+La validación local, Docker, CI, la integración del despliegue y los endpoints del servicio en Render están completados. SonarQube Cloud está integrado y su análisis fue validado en `feature/sonarcloud` con los resultados documentados anteriormente. La secuencia completa con SonarQube Cloud en `main` se comprobará después de integrar esta rama. La publicación de imágenes permanece fuera de esta etapa.
 
 ## Autoría y uso académico
 
