@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - feature/lab2-cicd
+      - 'feature/**'
   pull_request:
     branches:
       - main
@@ -71,3 +71,19 @@ jobs:
           path: target/lab2p2026.jar
           if-no-files-found: error
           retention-days: 7
+
+  deploy:
+    name: Deploy to Render
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deployment
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          test -n "$RENDER_DEPLOY_HOOK_URL"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --output /dev/null \
+            "$RENDER_DEPLOY_HOOK_URL"
