@@ -3,6 +3,7 @@
 [![Quality Gate](https://sonarcloud.io/api/project_badges/quality_gate?project=Camii1234_lab2p2026)](https://sonarcloud.io/summary/new_code?id=Camii1234_lab2p2026)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Camii1234_lab2p2026&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Camii1234_lab2p2026)
 [![Known Vulnerabilities](https://snyk.io/test/github/Camii1234/lab2p2026/badge.svg)](https://snyk.io/test/github/Camii1234/lab2p2026)
+[![CI/CD Pipeline](https://github.com/Camii1234/lab2p2026/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Camii1234/lab2p2026/actions/workflows/build.yml)
 
 Backend REST desarrollado con Spring Boot a partir del proyecto base del laboratorio. Permite consultar el estado de la aplicación, su versión y datos aleatorios de naciones, monedas y aviación. El trabajo incorpora pruebas automatizadas, cobertura con JaCoCo, análisis de calidad con SonarQube Cloud, integración continua, contenerización con Docker y despliegue en Render.
 
@@ -169,10 +170,11 @@ El repositorio fue integrado con Snyk para analizar las dependencias declaradas 
 
 | Análisis | Resultados revisados |
 | --- | --- |
-| Maven (`pom.xml`) | 44 dependencias y 24 hallazgos sin corrección soportada |
+| Maven inicial (proyecto autenticado, `pom.xml`) | 44 dependencias y 24 hallazgos sin corrección soportada |
+| Reporte público consultado durante la auditoría final | 43 dependencias y 16 vulnerabilidades mediante 36 rutas |
 | Contenedor (`Dockerfile`) | Vulnerabilidades de paquetes del sistema operativo |
 
-Los resultados fueron revisados y se conservarán para seguimiento. Esta integración no implica que las vulnerabilidades detectadas hayan sido corregidas.
+Los resultados fueron revisados y se conservarán para seguimiento. La diferencia entre el análisis inicial autenticado y el reporte público puede corresponder al alcance, la fuente o el momento del análisis; no debe presentarse como evidencia de que las vulnerabilidades hayan sido corregidas.
 
 ## Contenerización con Docker
 
@@ -283,7 +285,7 @@ La validación en la nube obtuvo:
 
 Las ejecuciones históricas exitosas pueden consultarse en GitHub Actions: [pruebas y construcción en `feature/lab2-cicd`](https://github.com/Camii1234/lab2p2026/actions/runs/37786740796) y [pruebas, construcción y despliegue en `main`](https://github.com/Camii1234/lab2p2026/actions/runs/37796502460).
 
-La validación local, Docker, CI, la integración del despliegue y los endpoints del servicio en Render están completados. SonarQube Cloud está integrado y su análisis fue validado en `feature/sonarcloud` con los resultados documentados anteriormente. La secuencia completa con SonarQube Cloud en `main` se comprobará después de integrar esta rama. La publicación de imágenes permanece fuera de esta etapa.
+La validación local, Docker, CI, la integración del despliegue y los endpoints del servicio en Render están completados. SonarQube Cloud está integrado y su análisis fue validado en `feature/sonarcloud` con los resultados documentados anteriormente. El pipeline de `main` fue validado exitosamente: se ejecutaron las pruebas (`tests`), el análisis SonarCloud (`sonar`) con Quality Gate aprobado, la construcción del JAR (`build`) y el despliegue en Render (`deploy`). La publicación de imágenes permanece fuera de esta etapa.
 
 ## Autoría y uso académico
 
