@@ -1,6 +1,8 @@
 # Laboratorio 2 de Arquitectura de Software
 
-Backend REST desarrollado con Spring Boot a partir del proyecto base del laboratorio. Permite consultar el estado de la aplicación, su versión y datos aleatorios de naciones, monedas y aviación. El trabajo incorpora pruebas automatizadas, cobertura con JaCoCo, integración continua y contenerización con Docker.
+Backend REST desarrollado con Spring Boot a partir del proyecto base del laboratorio. Permite consultar el estado de la aplicación, su versión y datos aleatorios de naciones, monedas y aviación. El trabajo incorpora pruebas automatizadas, cobertura con JaCoCo, integración continua, contenerización con Docker y despliegue en Render.
+
+Backend público: [lab2p2026-maria-camila.onrender.com](https://lab2p2026-maria-camila.onrender.com).
 
 ## Información académica
 
@@ -23,8 +25,9 @@ Backend REST desarrollado con Spring Boot a partir del proyecto base del laborat
 | JUnit Jupiter | Pruebas incluidas mediante el starter de pruebas de Spring Boot |
 | JaCoCo 0.8.10 | Medición de cobertura y generación del reporte local |
 | JavaFaker 1.0.2 | Generación de datos aleatorios |
-| GitHub Actions | Pruebas y construcción del artefacto JAR |
+| GitHub Actions | Pruebas, construcción del artefacto JAR y solicitud de despliegue |
 | Docker | Construcción multietapa y ejecución del backend |
+| Render | Alojamiento del backend mediante Docker |
 
 ## Estructura del proyecto
 
@@ -87,6 +90,16 @@ Las siete pruebas verifican salud, versión, cantidades de datos, formato de los
 
 JaCoCo genera el reporte durante la fase `test`. Después de ejecutar las pruebas o `clean verify`, abre `target/site/jacoco/index.html` en un navegador. Los resultados de pruebas también quedan en `target/surefire-reports/`. La cobertura requiere ejecutar las pruebas; omitirlas no genera nuevos datos de cobertura.
 
+La medición inicial de JaCoCo registró:
+
+| Métrica | Cobertura inicial |
+| --- | --- |
+| Líneas | 91,89 % |
+| Instrucciones | 94,67 % |
+| Ramas | 100 % |
+| Métodos | 77,78 % |
+| Clases | 100 % |
+
 ## Endpoints
 
 | Método y ruta | Respuesta principal | HTTP verificado |
@@ -105,16 +118,26 @@ El endpoint de versión devuelve actualmente `1.0.0`, mientras que la versión M
 
 El workflow `CI/CD Pipeline` está definido en `.github/workflows/build.yml` y se activa mediante:
 
-- Push a `main` o `feature/lab2-cicd`.
+- Push a `main` o a cualquier rama que coincida con `feature/**`.
 - Pull requests dirigidos a `main`.
 - Ejecución manual con `workflow_dispatch`.
 
-Los jobs utilizan `ubuntu-latest`, Eclipse Temurin Java 17, el Maven Wrapper y la caché de Maven integrada en `setup-java`. Los permisos del workflow se limitan a `contents: read`.
+Los jobs de pruebas y construcción utilizan `ubuntu-latest`, Eclipse Temurin Java 17, el Maven Wrapper y la caché de Maven integrada en `setup-java`. Los permisos del workflow se limitan a `contents: read`.
 
 1. **`tests` — Unit tests:** concede permiso de ejecución a `mvnw`, muestra las versiones de Java y Maven, y ejecuta `./mvnw -B --no-transfer-progress clean verify` con pruebas.
 2. **`build` — Build JAR:** depende de `tests` mediante `needs: tests`. Si las pruebas finalizan correctamente, ejecuta `./mvnw -B --no-transfer-progress package -DskipTests`, comprueba que exista `target/lab2p2026.jar` y lo carga como artefacto `lab2p2026-jar`, con retención de 7 días. Si falta el JAR, el job falla.
+3. **`deploy` — Deploy to Render:** depende de `build` y solo se ejecuta si el evento es un push a `main`, con la condición `github.event_name == 'push' && github.ref == 'refs/heads/main'`. Comprueba que el secreto de repositorio `RENDER_DEPLOY_HOOK_URL` no esté vacío y solicita el despliegue mediante un POST, sin imprimir su valor ni el cuerpo de la respuesta.
 
-En el segundo job se omiten las pruebas porque ya fueron ejecutadas correctamente por el primero. El pipeline actual construye y conserva el artefacto; el despliegue en nube permanece pendiente.
+La secuencia configurada es **`tests → build → deploy`**. En el segundo job se omiten las pruebas porque ya fueron ejecutadas correctamente por el primero.
+
+| Evento | Comportamiento |
+| --- | --- |
+| Push a `feature/**` | Ejecuta pruebas y construcción; omite el despliegue |
+| Pull request hacia `main` | Ejecuta pruebas y construcción; omite el despliegue |
+| Push a `main` | Solicita el despliegue únicamente después de que `tests` y `build` terminen correctamente |
+| Ejecución manual | Ejecuta pruebas y construcción; omite el despliegue |
+
+El Deploy Hook solicita el despliegue, pero GitHub Actions no espera a que Render termine la construcción y el arranque. El job `deploy` está configurado; su comprobación final en un push a `main` se realizará después de fusionar `feature/cloud-deployment`.
 
 ## Contenerización con Docker
 
@@ -173,10 +196,38 @@ docker rm lab2p2026-local
 
 La imagen `lab2p2026:local` se conserva localmente.
 
+## Despliegue en Render
+
+| Configuración | Valor |
+| --- | --- |
+| Servicio público | [lab2p2026-maria-camila.onrender.com](https://lab2p2026-maria-camila.onrender.com) |
+| Plataforma | Render |
+| Plan | Free |
+| Región | Oregon |
+| Construcción | Dockerfile del repositorio [Camii1234/lab2p2026](https://github.com/Camii1234/lab2p2026) |
+| Auto-Deploy | Desactivado |
+
+La integración sigue el flujo **GitHub Actions → Deploy Hook → Render → Docker**. Después de las pruebas y la construcción, el job `deploy` solicita a Render un despliegue mediante el secreto `RENDER_DEPLOY_HOOK_URL`. Render construye la imagen con el Dockerfile del repositorio y ejecuta el JAR generado durante esa construcción.
+
+La aplicación utiliza el `PORT` proporcionado por Render, con 8080 como valor predeterminado local. El contenedor mantiene Java 17 y el usuario sin privilegios `app`. Auto-Deploy está desactivado para que las solicitudes automáticas de despliegue se controlen desde el pipeline.
+
+Los servicios del plan Free pueden entrar en reposo después de un periodo de inactividad. La primera solicitud posterior puede tardar más mientras el servicio vuelve a arrancar, según la [documentación oficial de Render](https://render.com/docs/free#spinning-down-on-idle).
+
+La validación en la nube obtuvo:
+
+| Endpoint público | HTTP | Resultado principal |
+| --- | --- | --- |
+| [GET /](https://lab2p2026-maria-camila.onrender.com/) | 200 | `HEALTH CHECK OK!` |
+| [GET /version](https://lab2p2026-maria-camila.onrender.com/version) | 200 | `The actual version is 1.0.0` |
+| [GET /nations](https://lab2p2026-maria-camila.onrender.com/nations) | 200 | 10 elementos |
+| [GET /currencies](https://lab2p2026-maria-camila.onrender.com/currencies) | 200 | 20 elementos |
+| [GET /aviation](https://lab2p2026-maria-camila.onrender.com/aviation) | 200 | 20 elementos |
+
 ## Estrategia de ramas
 
 - **`main`:** rama estable del proyecto.
 - **`feature/lab2-cicd`:** rama de trabajo para el pipeline, la contenerización y la documentación del laboratorio.
+- **`feature/cloud-deployment`:** rama de trabajo para la integración y documentación del despliegue en Render.
 - **Integración:** los cambios se integrarán posteriormente en `main` mediante un pull request, después de su revisión y de la ejecución exitosa de CI.
 
 ## Resultados verificados y estado
@@ -189,11 +240,14 @@ La imagen `lab2p2026:local` se conserva localmente.
 | Docker | Imagen `lab2p2026:local` construida correctamente |
 | Backend en contenedor | Cinco endpoints con HTTP 200 y cantidades 10, 20 y 20 |
 | Puerto y usuario del contenedor | `PORT=10000`, proceso Java como `app` con UID 10001 |
-| GitHub Actions | Pipeline finalizado correctamente en `feature/lab2-cicd` |
+| CI de pruebas y construcción | Ejecución finalizada correctamente en `feature/lab2-cicd` |
+| Render | Backend público desplegado con plan Free en Oregon |
+| Backend en la nube | Cinco endpoints con HTTP 200 y cantidades 10, 20 y 20 |
+| Integración de despliegue | Job `deploy` configurado; comprobación final en `main` después de fusionar la rama |
 
 La ejecución exitosa de CI puede consultarse en [GitHub Actions](https://github.com/Camii1234/lab2p2026/actions/runs/37786740796).
 
-La validación local, Docker y CI están completadas. El despliegue en un proveedor de nube todavía está pendiente. Las configuraciones heredadas de análisis presentes en el POM no constituyen una integración activa en el pipeline actual; los servicios externos de análisis, publicación de imágenes y despliegue quedan fuera de esta etapa.
+La validación local, Docker, CI de pruebas y construcción, y los endpoints del servicio desplegado en Render están completados. Queda por comprobar el job `deploy` en un push a `main` después de fusionar la rama. Las configuraciones heredadas de análisis presentes en el POM no constituyen una integración activa en el pipeline actual; el análisis externo y la publicación de imágenes permanecen fuera de esta etapa.
 
 ## Autoría y uso académico
 
